@@ -1,4 +1,8 @@
-"""Handlers for workflow operations."""
+"""Handlers for workflow operations.
+
+LoyaltyLion read-only fork: write handlers (start_workflow,
+cancel_workflow, terminate_workflow) have been removed.
+"""
 
 import asyncio
 import json
@@ -7,69 +11,6 @@ import sys
 from mcp.types import TextContent
 from temporalio.client import Client
 from temporalio.api.enums.v1 import WorkflowExecutionStatus
-
-
-async def start_workflow(client: Client, args: dict) -> list[TextContent]:
-    """Start a new workflow execution.
-
-    Args:
-        client: Connected Temporal client
-        args: Arguments containing workflow_name, workflow_id, task_queue, and optional args
-
-    Returns:
-        Success response with workflow details
-    """
-    workflow_name = args["workflow_name"]
-    workflow_id = args["workflow_id"]
-    task_queue = args["task_queue"]
-    workflow_args = args.get("args", {})
-
-    handle = await client.start_workflow(
-        workflow_name,
-        workflow_args,
-        id=workflow_id,
-        task_queue=task_queue,
-    )
-
-    result = {"workflow_id": handle.id, "run_id": handle.result_run_id, "status": "started"}
-    return [TextContent(type="text", text=json.dumps(result, indent=2))]
-
-
-async def cancel_workflow(client: Client, args: dict) -> list[TextContent]:
-    """Cancel a workflow execution.
-
-    Args:
-        client: Connected Temporal client
-        args: Arguments containing workflow_id
-
-    Returns:
-        Success response
-    """
-    workflow_id = args["workflow_id"]
-
-    handle = client.get_workflow_handle(workflow_id)
-    await handle.cancel()
-
-    return [TextContent(type="text", text=json.dumps({"status": "cancelled", "workflow_id": workflow_id}, indent=2))]
-
-
-async def terminate_workflow(client: Client, args: dict) -> list[TextContent]:
-    """Terminate a workflow execution.
-
-    Args:
-        client: Connected Temporal client
-        args: Arguments containing workflow_id and optional reason
-
-    Returns:
-        Success response
-    """
-    workflow_id = args["workflow_id"]
-    reason = args.get("reason", "Terminated via MCP")
-
-    handle = client.get_workflow_handle(workflow_id)
-    await handle.terminate(reason)
-
-    return [TextContent(type="text", text=json.dumps({"status": "terminated", "workflow_id": workflow_id, "reason": reason}, indent=2))]
 
 
 async def get_workflow_result(client: Client, args: dict) -> list[TextContent]:
@@ -161,7 +102,6 @@ async def list_workflows(client: Client, args: dict) -> list[TextContent]:
     total_fetched = 0
 
     async for workflow in client.list_workflows(query):
-        # Skip the first 'skip' results
         if count < skip:
             count += 1
             continue
@@ -182,7 +122,6 @@ async def list_workflows(client: Client, args: dict) -> list[TextContent]:
         if total_fetched >= limit:
             break
 
-    # Check if there are more results
     has_more = False
     try:
         async for _ in client.list_workflows(query):

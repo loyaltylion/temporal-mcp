@@ -1,4 +1,8 @@
-# Temporal MCP Server
+# Temporal MCP Server — LoyaltyLion read-only fork
+
+> **This is a fork.** Upstream is [GethosTheWalrus/temporal-mcp](https://github.com/GethosTheWalrus/temporal-mcp). This fork removes every mutating tool (start / signal / cancel / terminate / continue_as_new, the `batch_*` trio, and the schedule mutations) so AI clients can only inspect Temporal — they can't change anything. Only six tools remain: `describe_workflow`, `get_workflow_history`, `get_workflow_result`, `list_schedules`, `list_workflows`, `query_workflow`. See `temporal_mcp/tools/tool_definitions.py` and `temporal_mcp/server.py` for the trimmed surface.
+>
+> The PyPI / Docker Hub distributions linked below are upstream and have the full tool set — do not use them. Install from this fork (`pip install git+https://github.com/loyaltylion/temporal-mcp@<sha>`).
 
 ## Overview
 
@@ -12,36 +16,19 @@ Read more on the [Temporal Code Exchange](https://temporal.io/code-exchange/temp
 
 ## Tools
 
-### Workflow Execution
+This fork exposes six read-only tools. Every other tool from upstream has been removed at the source level.
 
-- **`start_workflow`** - Start a new Temporal workflow execution with specified parameters, workflow ID, and task queue
-- **`get_workflow_result`** - Retrieve the result of a completed workflow execution
+### Workflow Inspection
+
 - **`describe_workflow`** - Get detailed information about a workflow execution including status, timing, and metadata
-- **`list_workflows`** - List workflow executions based on a query filter with pagination support (limit/skip)
+- **`get_workflow_result`** - Retrieve the result of a completed workflow execution
 - **`get_workflow_history`** - Retrieve the complete event history of a workflow execution
+- **`list_workflows`** - List workflow executions based on a query filter with pagination support (limit/skip)
+- **`query_workflow`** - Query a running workflow for its current state. Read-only by Temporal contract — queries don't append history events or fire activities, though a buggy workflow-side query handler could mutate in-memory state.
 
-### Workflow Control
+### Schedule Inspection
 
-- **`query_workflow`** - Query a running workflow for its current state without affecting execution
-- **`signal_workflow`** - Send a signal to a running workflow to change its behavior or provide data
-- **`cancel_workflow`** - Request cancellation of a running workflow execution
-- **`terminate_workflow`** - Forcefully terminate a workflow execution with a reason
-- **`continue_as_new`** - Signal a workflow to continue as new (restart with new inputs while preserving history link)
-
-### Batch Operations
-
-- **`batch_signal`** - Send a signal to multiple workflows matching a query (configurable batch size)
-- **`batch_cancel`** - Cancel multiple workflows matching a query (configurable batch size)
-- **`batch_terminate`** - Terminate multiple workflows matching a query with a specified reason (configurable batch size)
-
-### Schedule Management
-
-- **`create_schedule`** - Create a new schedule for periodic workflow execution using cron expressions
 - **`list_schedules`** - List all schedules with pagination support (limit/skip)
-- **`pause_schedule`** - Pause a schedule to temporarily stop workflow executions
-- **`unpause_schedule`** - Resume a paused schedule
-- **`delete_schedule`** - Permanently delete a schedule
-- **`trigger_schedule`** - Manually trigger a scheduled workflow immediately
 
 ## Temporal Documentation
 

@@ -1,14 +1,14 @@
 [project]
 name = "temporal-mcp-server"
 version = "1.1.1"
-description = "MCP server for Temporal workflow orchestration"
+description = "MCP server for Temporal workflow orchestration (LoyaltyLion read-only fork)"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 authors = [
     {name = "Mike Toscano", email = "mike@miketoscano.com"},
 ]
-keywords = ["temporal", "mcp", "model-context-protocol", "workflow", "orchestration"]
+keywords = ["temporal", "mcp", "model-context-protocol", "workflow", "orchestration", "read-only"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -27,9 +27,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/GethosTheWalrus/temporal-mcp"
-Repository = "https://github.com/GethosTheWalrus/temporal-mcp"
-Issues = "https://github.com/GethosTheWalrus/temporal-mcp/issues"
+Homepage = "https://github.com/loyaltylion/temporal-mcp"
+Repository = "https://github.com/loyaltylion/temporal-mcp"
+Upstream = "https://github.com/GethosTheWalrus/temporal-mcp"
 
 [project.scripts]
 temporal-mcp-server = "temporal_mcp.__main__:main"

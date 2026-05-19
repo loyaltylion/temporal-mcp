@@ -1,4 +1,9 @@
-"""Handlers for workflow query and signal operations."""
+"""Handlers for workflow query operations.
+
+LoyaltyLion read-only fork: signal_workflow and continue_as_new have been
+removed. Only query_workflow remains; queries are read-only by Temporal
+contract.
+"""
 
 import json
 
@@ -24,51 +29,3 @@ async def query_workflow(client: Client, args: dict) -> list[TextContent]:
     result = await handle.query(query_name, query_args)
 
     return [TextContent(type="text", text=json.dumps({"query_result": result}, indent=2, default=str))]
-
-
-async def signal_workflow(client: Client, args: dict) -> list[TextContent]:
-    """Send a signal to a workflow.
-
-    Args:
-        client: Connected Temporal client
-        args: Arguments containing workflow_id, signal_name, and optional args
-
-    Returns:
-        Success response
-    """
-    workflow_id = args["workflow_id"]
-    signal_name = args["signal_name"]
-    signal_args = args.get("args")
-
-    handle = client.get_workflow_handle(workflow_id)
-    await handle.signal(signal_name, signal_args)
-
-    return [TextContent(type="text", text=json.dumps({"status": "signal_sent", "workflow_id": workflow_id, "signal_name": signal_name}, indent=2))]
-
-
-async def continue_as_new(client: Client, args: dict) -> list[TextContent]:
-    """Signal a workflow to continue as new.
-
-    Note: This sends a signal to the workflow. The workflow itself must be
-    designed to call workflow.continue_as_new() when it receives this signal.
-
-    Args:
-        client: Connected Temporal client
-        args: Arguments containing workflow_id, signal_name, and optional signal_args
-
-    Returns:
-        Success response
-    """
-    workflow_id = args["workflow_id"]
-    signal_name = args["signal_name"]
-    signal_args = args.get("signal_args", {})
-
-    handle = client.get_workflow_handle(workflow_id)
-    await handle.signal(signal_name, signal_args)
-
-    return [
-        TextContent(
-            type="text",
-            text=json.dumps({"status": "signal_sent", "workflow_id": workflow_id, "signal_name": signal_name, "note": "Workflow must implement continue-as-new logic in signal handler"}, indent=2),
-        )
-    ]

@@ -8,19 +8,6 @@ from temporal_mcp.handlers import workflow_handlers, query_handlers
 
 class TestErrorHandling:
     @pytest.mark.asyncio
-    async def test_start_workflow_error(self, mock_client):
-        mock_client.start_workflow.side_effect = Exception("Connection error")
-
-        args = {
-            "workflow_name": "TestWorkflow",
-            "workflow_id": "test-workflow-123",
-            "task_queue": "test-queue",
-        }
-
-        with pytest.raises(Exception, match="Connection error"):
-            await workflow_handlers.start_workflow(mock_client, args)
-
-    @pytest.mark.asyncio
     async def test_query_workflow_not_found(self, mock_client):
         mock_handle = AsyncMock()
         mock_handle.query.side_effect = Exception("Workflow not found")
