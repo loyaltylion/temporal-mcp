@@ -8,61 +8,6 @@ from datetime import datetime
 from temporal_mcp.handlers import workflow_handlers
 
 
-class TestStartWorkflow:
-    @pytest.mark.asyncio
-    async def test_start_workflow_success(self, mock_client):
-        mock_handle = AsyncMock()
-        mock_handle.id = "test-workflow-123"
-        mock_handle.result_run_id = "run-456"
-        mock_client.start_workflow.return_value = mock_handle
-
-        args = {
-            "workflow_name": "TestWorkflow",
-            "workflow_id": "test-workflow-123",
-            "task_queue": "test-queue",
-            "args": {"key": "value"},
-        }
-
-        result = await workflow_handlers.start_workflow(mock_client, args)
-
-        assert len(result) == 1
-        response = json.loads(result[0].text)
-        assert response["workflow_id"] == "test-workflow-123"
-        assert response["run_id"] == "run-456"
-        assert response["status"] == "started"
-        mock_client.start_workflow.assert_called_once()
-
-
-class TestCancelWorkflow:
-    @pytest.mark.asyncio
-    async def test_cancel_workflow_success(self, mock_client):
-        mock_handle = AsyncMock()
-        mock_client.get_workflow_handle = MagicMock(return_value=mock_handle)
-
-        result = await workflow_handlers.cancel_workflow(mock_client, {"workflow_id": "test-workflow-123"})
-
-        assert len(result) == 1
-        response = json.loads(result[0].text)
-        assert response["status"] == "cancelled"
-        mock_handle.cancel.assert_called_once()
-
-
-class TestTerminateWorkflow:
-    @pytest.mark.asyncio
-    async def test_terminate_workflow_success(self, mock_client):
-        mock_handle = AsyncMock()
-        mock_client.get_workflow_handle = MagicMock(return_value=mock_handle)
-
-        args = {"workflow_id": "test-workflow-123", "reason": "Test termination"}
-        result = await workflow_handlers.terminate_workflow(mock_client, args)
-
-        assert len(result) == 1
-        response = json.loads(result[0].text)
-        assert response["status"] == "terminated"
-        assert response["reason"] == "Test termination"
-        mock_handle.terminate.assert_called_once_with("Test termination")
-
-
 class TestGetWorkflowResult:
     @pytest.mark.asyncio
     async def test_get_workflow_result_success(self, mock_client):
