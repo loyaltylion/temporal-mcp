@@ -10,8 +10,8 @@ from temporal_mcp.handlers import query_handlers
 class TestQueryWorkflow:
     @pytest.mark.asyncio
     async def test_query_workflow_success(self, mock_client):
-        mock_handle = AsyncMock()
-        mock_handle.query.return_value = {"status": "running", "progress": 50}
+        mock_handle = MagicMock()
+        mock_handle.query = AsyncMock(return_value={"status": "running", "progress": 50})
         mock_client.get_workflow_handle = MagicMock(return_value=mock_handle)
 
         args = {

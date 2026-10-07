@@ -6,11 +6,12 @@ the read handlers.
 """
 
 import json
-from typing import Any, Optional
+import sys
+from typing import Any, Optional, Sequence
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import CallToolRequestParams, CallToolResult, ContentBlock, ListToolsResult, TextContent
 
 from .client import TemporalClientManager
 from .tools.tool_definitions import get_all_tools
@@ -19,6 +20,7 @@ from .utils.exceptions import format_connection_error, format_error_response
 from .handlers import workflow_handlers
 from .handlers import query_handlers
 from .handlers import schedule_handlers
+from .handlers import activity_handlers
 
 
 class TemporalMCPServer:
@@ -32,6 +34,7 @@ class TemporalMCPServer:
         tls_client_cert_path: Optional[str] = None,
         tls_client_key_path: Optional[str] = None,
         api_key: Optional[str] = None,
+        allowed_namespaces: Optional[Sequence[str]] = None,
     ):
         """Initialize the Temporal MCP server.
 
@@ -42,6 +45,8 @@ class TemporalMCPServer:
             tls_client_cert_path: Path to the TLS client certificate file (for mTLS / Temporal Cloud)
             tls_client_key_path: Path to the TLS client private key file (for mTLS / Temporal Cloud)
             api_key: API key for Temporal Cloud authentication
+            allowed_namespaces: Namespaces callers may select. None permits only the
+                configured default; ["*"] permits any namespace.
         """
         self.client_manager = TemporalClientManager(
             temporal_host=temporal_host,
@@ -50,47 +55,77 @@ class TemporalMCPServer:
             tls_client_cert_path=tls_client_cert_path,
             tls_client_key_path=tls_client_key_path,
             api_key=api_key,
+            allowed_namespaces=allowed_namespaces,
         )
-        self.server = Server("temporal-mcp-server")
-        self._setup_handlers()
+        self.server = Server(
+            "temporal-mcp-server",
+            on_list_tools=self._list_tools,
+            on_call_tool=self._call_tool,
+        )
 
-    def _setup_handlers(self):
-        """Set up MCP request handlers."""
+    async def _list_tools(self, context: Any, params: Any) -> ListToolsResult:
+        """List available Temporal tools."""
+        return ListToolsResult(tools=get_all_tools(self.client_manager.allowed_namespaces))
 
-        @self.server.list_tools()
-        async def list_tools() -> list[Tool]:
-            """List available Temporal tools."""
-            return get_all_tools()
+    async def _call_tool(self, context: Any, params: CallToolRequestParams) -> CallToolResult:
+        """Handle tool execution requests."""
+        result = await self._execute_tool(params.name, params.arguments or {})
+        if isinstance(result, CallToolResult):
+            return result
+        return CallToolResult(content=list(result))
 
-        @self.server.call_tool()
-        async def call_tool(name: str, arguments: Any) -> list[TextContent]:
-            """Handle tool execution requests."""
-            try:
-                await self.client_manager.connect()
-            except Exception as e:
-                return format_connection_error(e)
+    async def _execute_tool(self, name: str, arguments: Any) -> Sequence[ContentBlock] | CallToolResult:
+        """Execute a Temporal tool by name."""
+        handler_arguments = dict(arguments)
+        requested_namespace = handler_arguments.pop("namespace", None)
 
-            try:
-                client = self.client_manager.ensure_connected()
+        try:
+            # Only omission may select the default; JSON null must fail closed.
+            if "namespace" in arguments and requested_namespace is None:
+                raise ValueError("Namespace must be a non-empty string")
+            namespace = self.client_manager.resolve_namespace(requested_namespace)
+        except Exception as e:
+            print(f"Rejected tool {name} namespace={requested_namespace!r}: {e}", file=sys.stderr)
+            return CallToolResult(content=list(format_error_response(e, name)), is_error=True)
 
-                if name == "describe_workflow":
-                    return await workflow_handlers.describe_workflow(client, arguments)
-                elif name == "get_workflow_history":
-                    return await workflow_handlers.get_workflow_history(client, arguments)
-                elif name == "get_workflow_result":
-                    return await workflow_handlers.get_workflow_result(client, arguments)
-                elif name == "list_workflows":
-                    return await workflow_handlers.list_workflows(client, arguments)
-                elif name == "query_workflow":
-                    return await query_handlers.query_workflow(client, arguments)
-                elif name == "list_schedules":
-                    return await schedule_handlers.list_schedules(client, arguments)
+        try:
+            client = await self.client_manager.get_client(namespace)
+        except Exception as e:
+            print(f"Connection failed for tool {name} namespace={namespace}: {e}", file=sys.stderr)
+            return format_connection_error(e)
 
-                else:
-                    return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}", "type": "unknown_tool"}, indent=2))]
+        print(f"Executing tool {name} namespace={namespace}", file=sys.stderr)
+        try:
+            if name == "describe_workflow":
+                return await workflow_handlers.describe_workflow(client, handler_arguments)
+            elif name == "get_workflow_event":
+                return await workflow_handlers.get_workflow_event(client, handler_arguments)
+            elif name == "get_workflow_history":
+                return await workflow_handlers.get_workflow_history(client, handler_arguments)
+            elif name == "get_workflow_result":
+                return await workflow_handlers.get_workflow_result(client, handler_arguments)
+            elif name == "list_workflows":
+                return await workflow_handlers.list_workflows(client, handler_arguments)
+            elif name == "query_workflow":
+                return await query_handlers.query_workflow(client, handler_arguments)
+            elif name == "describe_activity":
+                return await activity_handlers.describe_activity(client, handler_arguments)
+            elif name == "get_activity_result":
+                return await activity_handlers.get_activity_result(client, handler_arguments)
+            elif name == "list_activities":
+                return await activity_handlers.list_activities(client, handler_arguments)
+            elif name == "count_activities":
+                return await activity_handlers.count_activities(client, handler_arguments)
+            elif name == "describe_schedule":
+                return await schedule_handlers.describe_schedule(client, handler_arguments)
+            elif name == "list_schedules":
+                return await schedule_handlers.list_schedules(client, handler_arguments)
+            else:
+                return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}", "type": "unknown_tool"}, indent=2))]
 
-            except Exception as e:
-                return format_error_response(e, name)
+        except Exception as e:
+            print(f"Tool failed: {name} namespace={namespace}", file=sys.stderr)
+            return format_error_response(e, name)
 
     async def run(self):
         """Run the MCP server."""

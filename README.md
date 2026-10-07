@@ -1,12 +1,12 @@
 # Temporal MCP Server — LoyaltyLion read-only fork
 
-> **This is a fork.** Upstream is [GethosTheWalrus/temporal-mcp](https://github.com/GethosTheWalrus/temporal-mcp). This fork removes every mutating tool (start / signal / cancel / terminate / continue_as_new, the `batch_*` trio, and the schedule mutations) so AI clients can only inspect Temporal — they can't change anything. Only six tools remain: `describe_workflow`, `get_workflow_history`, `get_workflow_result`, `list_schedules`, `list_workflows`, `query_workflow`. See `temporal_mcp/tools/tool_definitions.py` and `temporal_mcp/server.py` for the trimmed surface.
+> **This is a fork.** Upstream is [GethosTheWalrus/temporal-mcp](https://github.com/GethosTheWalrus/temporal-mcp), merged here at `v1.10.1`. This fork removes every mutating tool (workflow start / signal / cancel / terminate / continue_as_new, standalone-activity start / execute / cancel / terminate, every `batch_*` tool, and the schedule mutations) so AI clients can only inspect Temporal — they can't change anything. Only twelve read-only tools remain: `count_activities`, `describe_activity`, `describe_schedule`, `describe_workflow`, `get_activity_result`, `get_workflow_event`, `get_workflow_history`, `get_workflow_result`, `list_activities`, `list_schedules`, `list_workflows`, `query_workflow`. See `temporal_mcp/tools/tool_definitions.py` and `temporal_mcp/server.py` for the trimmed surface, and `tests/test_read_only_surface.py`, which fails if a merge from upstream re-adds a tool.
 >
 > The PyPI / Docker Hub distributions linked below are upstream and have the full tool set — do not use them. Install from this fork (`pip install git+https://github.com/loyaltylion/temporal-mcp@<sha>`).
 
 ## Overview
 
-This is a Model Context Protocol (MCP) server that provides tools for interacting with Temporal workflow orchestration. It enables AI assistants and other MCP clients to manage Temporal workflows, schedules, and workflow executions through a standardized interface. The server supports both local and remote Temporal instances.
+This is a Model Context Protocol (MCP) server that provides tools for interacting with Temporal workflow orchestration. It enables AI assistants and other MCP clients to inspect Temporal workflows, schedules, and workflow executions through a standardized interface. The server supports both local and remote Temporal instances.
 
 Read more on the [Temporal Code Exchange](https://temporal.io/code-exchange/temporal-mcp-server)
 
@@ -16,19 +16,30 @@ Read more on the [Temporal Code Exchange](https://temporal.io/code-exchange/temp
 
 ## Tools
 
-This fork exposes six read-only tools. Every other tool from upstream has been removed at the source level.
+This fork exposes twelve read-only tools. Every other tool from upstream has been removed at the source level.
 
 ### Workflow Inspection
 
 - **`describe_workflow`** - Get detailed information about a workflow execution including status, timing, and metadata
 - **`get_workflow_result`** - Retrieve the result of a completed workflow execution
-- **`get_workflow_history`** - Retrieve the complete event history of a workflow execution
+- **`get_workflow_history`** - Retrieve the event history of a workflow execution (optionally a specific `run_id`)
+- **`get_workflow_event`** - Retrieve a single workflow history event with decoded payload fields when present
 - **`list_workflows`** - List workflow executions based on a query filter with pagination support (limit/skip)
 - **`query_workflow`** - Query a running workflow for its current state. Read-only by Temporal contract — queries don't append history events or fire activities, though a buggy workflow-side query handler could mutate in-memory state.
+
+### Standalone Activity Inspection
+
+These see only *standalone* activities (started directly by a client), not activities run by a workflow.
+
+- **`describe_activity`** - Get detailed information about a standalone activity execution
+- **`get_activity_result`** - Retrieve the result of a standalone activity execution
+- **`list_activities`** - List standalone activity executions based on a query filter with pagination support (limit/skip)
+- **`count_activities`** - Count standalone activity executions matching a query
 
 ### Schedule Inspection
 
 - **`list_schedules`** - List all schedules with pagination support (limit/skip)
+- **`describe_schedule`** - Get detailed configuration and runtime information about a schedule, including its spec, action, state, recent executions, and upcoming action times
 
 ## Temporal Documentation
 
@@ -104,12 +115,31 @@ Recommended when running from PyPI via [`uvx`](https://docs.astral.sh/uv/guides/
 |--------|-------------|----------------------|---------|
 | Temporal host | `--host` | `TEMPORAL_HOST` | `localhost:7233` |
 | Namespace | `--namespace` | `TEMPORAL_NAMESPACE` | `default` |
+| Allowed namespaces | — | `TEMPORAL_ALLOWED_NAMESPACES` | configured namespace only |
 | TLS | `--tls-enabled` | `TEMPORAL_TLS_ENABLED` | auto-detect |
 | mTLS cert path | `--tls-cert` | `TEMPORAL_TLS_CLIENT_CERT_PATH` | — |
 | mTLS key path | `--tls-key` | `TEMPORAL_TLS_CLIENT_KEY_PATH` | — |
 | API key | `--api-key` | `TEMPORAL_API_KEY` | — |
+| Transport | `--transport` | `MCP_TRANSPORT` | `stdio` |
+| HTTP listen address | `--http-host` | `MCP_HTTP_HOST` | `127.0.0.1` |
+| HTTP listen port | `--http-port` | `MCP_HTTP_PORT` | `3000` |
 
 CLI arguments take precedence over environment variables. When `TEMPORAL_API_KEY` is set, TLS is enabled automatically. When mTLS cert/key paths are provided, TLS is also enabled automatically.
+
+Every tool accepts an optional `namespace` argument. If omitted, the server uses `--namespace`, then `TEMPORAL_NAMESPACE`, then `default`. Runtime overrides are disabled by default: set `TEMPORAL_ALLOWED_NAMESPACES` to a comma-separated allowlist such as `default,payments`, or set it to `*` to permit any namespace reachable through the configured Temporal host and credentials. A finite allowlist must include the configured default namespace.
+
+### HTTP transport (LoyaltyLion fork)
+
+Upstream serves stdio only. With `--transport http` this fork serves the same tools over HTTP from one process, with no stdio bridge in front:
+
+- **Streamable HTTP** at `/mcp`, stateless: each request is answered on its own and no `Mcp-Session-Id` is issued, so a client can't be left holding a session the server has forgotten.
+- **SSE** at `/sse`, with messages POSTed to `/messages/`, for clients configured with `type: sse`.
+
+```bash
+temporal-mcp-server --transport http --http-host 0.0.0.0 --http-port 3000
+```
+
+Every connection shares one Temporal client, created on the first tool call and closed at shutdown. The server does not check the `Host` or `Origin` header, which is what guards a local server against DNS rebinding. Keep the default `127.0.0.1` bind unless something in front of the server, such as a load balancer that routes on the host header, does that job. The code is in `temporal_mcp/http_app.py` and the tests in `tests/test_http_transport.py`.
 
 ## Development
 

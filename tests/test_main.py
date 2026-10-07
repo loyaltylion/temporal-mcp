@@ -1,8 +1,7 @@
 """Tests for __main__ entry point: CLI arg parsing, env var fallback, and precedence."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -21,7 +20,7 @@ def _run_main(argv: list[str], env: dict[str, str] | None = None):
     def fake_server(**kwargs):
         captured.update(kwargs)
         instance = MagicMock()
-        instance.run = AsyncMock()
+        instance.run = MagicMock()
         return instance
 
     with (
@@ -166,6 +165,14 @@ class TestEnvVarFallback:
     def test_api_key_from_env(self):
         kwargs = _run_main([], env={"TEMPORAL_API_KEY": "env-secret"})
         assert kwargs["api_key"] == "env-secret"
+
+    def test_allowed_namespaces_from_env(self):
+        kwargs = _run_main([], env={"TEMPORAL_ALLOWED_NAMESPACES": "default,payments"})
+        assert kwargs["allowed_namespaces"] == ["default", "payments"]
+
+    def test_allowed_namespaces_unset(self):
+        kwargs = _run_main([], env={})
+        assert kwargs["allowed_namespaces"] is None
 
 
 # ---------------------------------------------------------------------------
