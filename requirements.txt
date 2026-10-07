@@ -15,3 +15,7 @@ httpcore2>=2.10.0
 
 # Additional dependencies
 asyncio-atexit>=1.0.1
+
+# LoyaltyLion fork: imported directly by temporal_mcp/http_app.py
+starlette>=0.27
+uvicorn>=0.31.1

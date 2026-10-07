@@ -120,10 +120,26 @@ Recommended when running from PyPI via [`uvx`](https://docs.astral.sh/uv/guides/
 | mTLS cert path | `--tls-cert` | `TEMPORAL_TLS_CLIENT_CERT_PATH` | — |
 | mTLS key path | `--tls-key` | `TEMPORAL_TLS_CLIENT_KEY_PATH` | — |
 | API key | `--api-key` | `TEMPORAL_API_KEY` | — |
+| Transport | `--transport` | `MCP_TRANSPORT` | `stdio` |
+| HTTP listen address | `--http-host` | `MCP_HTTP_HOST` | `127.0.0.1` |
+| HTTP listen port | `--http-port` | `MCP_HTTP_PORT` | `3000` |
 
 CLI arguments take precedence over environment variables. When `TEMPORAL_API_KEY` is set, TLS is enabled automatically. When mTLS cert/key paths are provided, TLS is also enabled automatically.
 
 Every tool accepts an optional `namespace` argument. If omitted, the server uses `--namespace`, then `TEMPORAL_NAMESPACE`, then `default`. Runtime overrides are disabled by default: set `TEMPORAL_ALLOWED_NAMESPACES` to a comma-separated allowlist such as `default,payments`, or set it to `*` to permit any namespace reachable through the configured Temporal host and credentials. A finite allowlist must include the configured default namespace.
+
+### HTTP transport (LoyaltyLion fork)
+
+Upstream serves stdio only. With `--transport http` this fork serves the same tools over HTTP from one process, with no stdio bridge in front:
+
+- **Streamable HTTP** at `/mcp`, stateless: each request is answered on its own and no `Mcp-Session-Id` is issued, so a client can't be left holding a session the server has forgotten.
+- **SSE** at `/sse`, with messages POSTed to `/messages/`, for clients configured with `type: sse`.
+
+```bash
+temporal-mcp-server --transport http --http-host 0.0.0.0 --http-port 3000
+```
+
+Every connection shares one Temporal client, created on the first tool call and closed at shutdown. The server does not check the `Host` or `Origin` header, which is what guards a local server against DNS rebinding. Keep the default `127.0.0.1` bind unless something in front of the server, such as a load balancer that routes on the host header, does that job. The code is in `temporal_mcp/http_app.py` and the tests in `tests/test_http_transport.py`.
 
 ## Development
 
